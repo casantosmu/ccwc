@@ -13,6 +13,7 @@ import (
 )
 
 type config struct {
+	filename   string
 	countLines bool
 	countWord  bool
 	countChars bool
@@ -26,9 +27,10 @@ type counters struct {
 	byteCount int
 }
 
-func newConfig(countLines, countWord, countChars, countBytes bool) config {
+func newConfig(filename string, countLines, countWord, countChars, countBytes bool) config {
 	if !countLines && !countWord && !countChars && !countBytes {
 		return config{
+			filename:   filename,
 			countLines: true,
 			countWord:  true,
 			countBytes: true,
@@ -36,14 +38,15 @@ func newConfig(countLines, countWord, countChars, countBytes bool) config {
 	}
 
 	return config{
-		countLines,
-		countWord,
-		countChars,
-		countBytes,
+		filename:   filename,
+		countLines: countLines,
+		countWord:  countWord,
+		countChars: countChars,
+		countBytes: countBytes,
 	}
 }
 
-func counter(r io.Reader, conf config) (counters, error) {
+func count(r io.Reader, conf config) (counters, error) {
 	b, err := io.ReadAll(r)
 	if err != nil {
 		return counters{}, err
@@ -67,22 +70,27 @@ func counter(r io.Reader, conf config) (counters, error) {
 	return c, nil
 }
 
-func print(filename string, c counters, conf config) {
-	output := ""
+func print(counters counters, conf config) {
+	parts := []string{}
+
 	if conf.countLines {
-		output += fmt.Sprintf("%d ", c.lineCount)
+		parts = append(parts, fmt.Sprint(counters.lineCount))
 	}
 	if conf.countWord {
-		output += fmt.Sprintf("%d ", c.wordCount)
+		parts = append(parts, fmt.Sprint(counters.wordCount))
 	}
 	if conf.countChars {
-		output += fmt.Sprintf("%d ", c.charCount)
+		parts = append(parts, fmt.Sprint(counters.charCount))
 	}
 	if conf.countBytes {
-		output += fmt.Sprintf("%d ", c.byteCount)
+		parts = append(parts, fmt.Sprint(counters.byteCount))
+	}
+	if conf.filename != "" {
+		parts = append(parts, conf.filename)
 	}
 
-	log.Printf("%s%s\n", output, filename)
+	output := strings.Join(parts, " ")
+	log.Printf("%s\n", output)
 }
 
 func main() {
@@ -96,18 +104,24 @@ func main() {
 
 	filename := flag.Arg(0)
 
-	fi, err := os.Open(filename)
+	var r io.Reader
+	if filename == "" {
+		r = os.Stdin
+	} else {
+		fi, err := os.Open(filename)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer fi.Close()
+		r = fi
+	}
+
+	conf := newConfig(filename, *countLines, *countWords, *countChars, *countBytes)
+
+	counters, err := count(r, conf)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer fi.Close()
 
-	conf := newConfig(*countLines, *countWords, *countChars, *countBytes)
-
-	c, err := counter(fi, conf)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	print(filename, c, conf)
+	print(counters, conf)
 }

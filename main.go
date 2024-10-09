@@ -47,27 +47,40 @@ func newConfig(filename string, countLines, countWord, countChars, countBytes bo
 }
 
 func count(r io.Reader, conf config) (counters, error) {
-	b, err := io.ReadAll(r)
-	if err != nil {
-		return counters{}, err
-	}
-
 	c := counters{}
-	if conf.countLines {
-		c.lineCount = bytes.Count(b, []byte{'\n'})
-	}
-	if conf.countWord {
-		words := strings.Fields(string(b))
-		c.wordCount = len(words)
-	}
-	if conf.countChars {
-		c.charCount = utf8.RuneCount(b)
-	}
-	if conf.countBytes {
-		c.byteCount = len(b)
-	}
+	buf := make([]byte, 4*1024)
+	var reminder []byte
 
-	return c, nil
+	for {
+		n, err := r.Read(buf)
+		b := append(reminder, buf[:n]...)
+
+		if n > 0 {
+			i := bytes.LastIndexByte(b, ' ') + 1
+			reminder = b[i:]
+			b = b[:i]
+		}
+
+		if conf.countLines {
+			c.lineCount += bytes.Count(b, []byte{'\n'})
+		}
+		if conf.countWord {
+			c.wordCount += len(bytes.Fields(b))
+		}
+		if conf.countChars {
+			c.charCount += utf8.RuneCount(b)
+		}
+		if conf.countBytes {
+			c.byteCount += len(b)
+		}
+
+		switch {
+		case err == io.EOF:
+			return c, nil
+		case err != nil:
+			return counters{}, nil
+		}
+	}
 }
 
 func print(counters counters, conf config) {
